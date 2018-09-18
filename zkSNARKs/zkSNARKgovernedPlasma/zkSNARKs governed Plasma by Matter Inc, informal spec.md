@@ -155,3 +155,7 @@ There should exit a mechanism to still allow users to exit block submission is s
 - This block does NOT need to publish any data - everything important is already in the `public inputs`
 - Procedure repeats until the queue is empty
 - A block publisher gets some funds from the remaining operator's security deposit
+
+### Authors
+
+- Alex Vlasov, alex.m.vlasov@gmail.com
