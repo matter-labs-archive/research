@@ -35,6 +35,8 @@ In parallel I'll calculate some rough estimates for number of constraints per `t
 	-  MiMC `Longshift 2n/n`, ~ `800` constraints per hash
 	-  Pedderrsen hashes based on the embedded Edwards, ~ `3000` constraints per hashing `2n -> n`
 
+For detailed information check the following sources [1](https://github.com/zcash/zcash/issues/2233), [2](https://github.com/zcash/zcash/issues/2258).
+
 ### State format
 
 For purposes of this construction all the balances, public keys and additional information are stored in leafs of the sparse Merkle tree (SMT) of the depth `D`. To form the final `state` the root hash of SMT is additionally hashed with the block number that last updated this state. Each leaf stores the following parameters, that are later concatenated for hashing:
@@ -45,7 +47,7 @@ For purposes of this construction all the balances, public keys and additional i
 - `last sent at height` - the chain height when there was a last transfer from this account
 - `last updated at height` - chain height when there was a last transfer from this account or to this account [EDIT: This one is for information purposes, can me removed]
 
-Separation of block counters for last send and last incoming transaction is necessary to prevent an attack from the operator that blocks user's exit by making a deposit to his account.
+*Separation of height counters for last send and last incoming transaction is necessary to prevent an attack from the operator that blocks user's exit by making a deposit to his account.*[EDIT: `last updated at height` counter is most likely to be removed]
 
 ### Transaction format
 
@@ -121,7 +123,7 @@ One important aspect for limitation of number of deposits to the Plasma: an oper
 
 ### Exits block
 
-`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner. *For later block withholding attack purposes one can not yet allow an instant exit and an exiting account is required to have not sent any transactions over the last `3 days`. As proofs are committed to the main chain the timestamping is allowed in a form of lookup `time <=> chain height`* [EDIT] May be unnecessary!
+`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner. *For later block withholding attack purposes one can not yet allow an instant exit and an exiting account is required to have not sent any transactions over the last `3 days`. As proofs are committed to the main chain the timestamping is allowed in a form of lookup `time <=> chain height`* [EDIT May be unnecessary and removed later].
 
 Upon the `exit request` the user provider a zkSNARK proof of the full data availability for the last **state** his transaction was included in the chain along with some bond. This is effectively a Merkle proof for some `chain height`. As `public inputs` such zkSNARK discloses the `nonce`, `last sent at height` and `last updated at height` for the exiting `account`. The `last sent at height` field is checked agains timestamping and if more than `3 days` has passes the request is accepted. Those requests form a queue based on the `last sent at height` - the smaller is better.
 
