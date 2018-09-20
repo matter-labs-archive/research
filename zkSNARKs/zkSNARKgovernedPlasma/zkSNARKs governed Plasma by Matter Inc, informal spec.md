@@ -1,6 +1,6 @@
 # zkSNARKs governed Plasma by Matter Inc, informal spec
 
-### Draft 0.1, huge typing mistakes inside
+### Draft 0.2, with Q&A and clarifications
 
 ## Rationale
 
@@ -41,7 +41,7 @@ For purposes of this construction all the balances, public keys and additional i
 - `balance`
 - `nonce` - for replay protection
 - `last sent at height` - the chain height when there was a last transfer from this account
-- `last updated at height` - chain height when there was a last transfer from this account or to this account
+- `last updated at height` - chain height when there was a last transfer from this account or to this account [EDIT: This one is for information purposes, can me removed]
 
 Separation of block counters for last send and last incoming transaction is necessary to prevent an attack from the operator that blocks user's exit by making a deposit to his account.
 
@@ -54,12 +54,30 @@ The transaction format is the following:
 - `from` - enumerates an account of the sender
 - `to` - enumerates an account of the recipient
 - `nonce` - should match the nonce of the `from` account in SMT if this transaction is to be included in a block
+- `last sent at height` - indicates a corresponding field of the state. Logic is described below
 - `good up to height` - indicates that this transaction should only be included in a block of this height or less
-- `max fee` - the maximum fee amount that the sender wishes to pay for a transaction.
+- `max fee` - the maximum fee amount that the sender wishes to pay for a transaction
+- `allow multiple in block` - a permission from user to include multiple transactions into block
 
-Last field is optional in constructions 
+`max fee` field is optional in constructions that don't use per-transaction fee.
 
 Combination of separate `nonce` and `good up to height` is required as the Plasma is potentially censorable and user should have some guarantees that the Plasma operator will not have a power of second opinion and include an outdated transaction in a block.
+
+**Multiple transactions per block**
+
+*These restrictions may be excessive, WIP!*
+
+User can grant a permission to an operator a right to include more than one transaction in block. While the largest portion of state transition proving zkSNARK is described in the next section, here is a rationale why `last sent at height` is required as a part of the transaction and how multiple transaction per block work:
+
+- By providing an explicit `last sent at height` user gives a consent that he has observed the latest block in full. Of course there exist options about partial or full block withholding where only an operator knows it and can continue to sent new transactions, but it will implicitly prevent normal users from doing so!
+- If `allow multiple in block` is NOT set an operator should check the following:
+	- `nonce` matches the data in SMT
+	- `last sent at height` matches the data in SMT
+- IF `allow multiple in block` is set an operator should check the following:
+	- `nonce` matches the data in SMT for every transaction in sequence in this block
+	- `last sent at height` either matches the data in SMT OR is equal to the `new state height`
+
+`good up to height` field logic is described in the next session and is valid for both set and unset flag `allow multiple in block`.
 
 ### Transactions block
 
@@ -75,7 +93,8 @@ Internally the following is proved per application of one `transaction`:
 - Block ordering is checked (`old state height + 1 = new state height`)
 - Using the Merkle proof internal states of the two leafs updated by the transaction are proved for the previous state
 - Content of the `transaction` in block is a private input
-- Ownership is properly checked, `balances` are properly updated, `nonce` is increased, `last chain height` is updated for recipient and sender, `last sent at height` is updated for sender
+- Ownership is properly checked, `balances` are properly updated, `nonce` is increased, `last updated at height` is updated for recipient and sender, `last sent at height` is updated for sender
+- Rules about `last sent at height` for transaction with permission for multiple inclusion per block is honored
 - `good up to height` field of the transaction should be greater than or equal to the `new state height`
 - new Merkle tree root is recalculated
 - `total fee` is updated
@@ -100,11 +119,11 @@ One important aspect for limitation of number of deposits to the Plasma: an oper
 
 ### Exits block
 
-`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner. For later block withholding attack purposes one can not yet allow an instant exit and an exiting account is required to have not sent any transactions over the last `3 days`. As proofs are committed to the main chain the timestamping is allowed in a form of lookup `time <=> chain height`
+`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner. *For later block withholding attack purposes one can not yet allow an instant exit and an exiting account is required to have not sent any transactions over the last `3 days`. As proofs are committed to the main chain the timestamping is allowed in a form of lookup `time <=> chain height`* [EDIT] May be unnecessary!
 
-Upon the `exit request` the user provider a zkSNARK proof of the full data availability for the last block his transaction was included in the chain along with some bond. This is effectively a Merkle proof for some `chain height`. As `public inputs` such zkSNARK discloses the `nonce`, `last sent at height` and `last updated at height` for the exiting `account`. The `last sent at height` field is checked agains timestamping and if more than `3 days` has passes the request is accepted. Those requests form a queue based on the `last sent at height` - the smaller is better.
+Upon the `exit request` the user provider a zkSNARK proof of the full data availability for the last **state** his transaction was included in the chain along with some bond. This is effectively a Merkle proof for some `chain height`. As `public inputs` such zkSNARK discloses the `nonce`, `last sent at height` and `last updated at height` for the exiting `account`. The `last sent at height` field is checked agains timestamping and if more than `3 days` has passes the request is accepted. Those requests form a queue based on the `last sent at height` - the smaller is better.
 
-This exit request can be challenged over the `3 days` period by providing a proof of full data availability that discloses a state for the same `account` with higher `nonce` and `last sent at height`. Notice that higher `last updated at height` is not enough. This is a griefing vector, although the user should only be griefed at maximum once if he properly checks the data availability and does not sent transactions if the latest committed block is not published in full.
+This exit request can be challenged over the `3 days` period by providing a proof of full data availability that discloses a **state** for the same `account` with higher `nonce` and `last sent at height`. Notice that higher `last updated at height` is not enough. This is a griefing vector, although the user should only be griefed at maximum once if he properly checks the data availability and does not sent transactions if the latest committed block is not published in full.
 
 If the `exit request` is not challenged it has to be included into some `exit block` no later than `1 day` after the end of the challenge period. This requirement is enforced by the smart-contract that manages the exit queue.
 
@@ -155,6 +174,25 @@ There should exit a mechanism to still allow users to exit block submission is s
 - This block does NOT need to publish any data - everything important is already in the `public inputs`
 - Procedure repeats until the queue is empty
 - A block publisher gets some funds from the remaining operator's security deposit
+
+# Q&A
+- What is the block is not available in full?
+	- In this case no one can prove that some leaf in the SMT because the `new state` depends on the latest root hash of the SMT and can not be calculated without every transaction in block. The exception is if the block is padded by empty transactions, but it's trivial.
+- Why `last sent at height` should match at the exit block?
+	- Imaging the following if `last sent at height` is not checked:
+		- User `A` has a state with `last sent at height = N` and sends a transaction `A => B`
+		- This transaction is included in block `N+1`
+		- User colludes with an operator
+		- User publishes an exit request with the `last sent at height = N`
+		- No one can challenge this request
+		- An operator proceeds with an `exit block` AFTER block `N+1` and this block is accepted as `last sent at height = N+1 != N`, but this field is not checked!
+		- An operator publishes an exit from `B`
+		- This is a double spend!
+	- If `last sent at height` is checked an operator can not proceed with `exit block` for user `A` that has priority `N` and that will become the first in a queue even if an operator published all possible `exit blocks`, but still will not challenge an exit request with a newer state!. So, `N` becomes a last point of validity and data availability.
+- Are blocks published?
+	- Block headers (which are Merkle tree roots of the transactions tree) are published as one of the public inputs to the `transaction block` zkSNARK proof.
+	- Those headers are NOT stored on-chain
+	- Users should download a block in full from the operator and check off-chain that the header from downloaded block matches the published one.
 
 ### Authors
 
