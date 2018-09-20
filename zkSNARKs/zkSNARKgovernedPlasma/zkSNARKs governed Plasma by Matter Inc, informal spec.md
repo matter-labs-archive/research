@@ -2,6 +2,8 @@
 
 ### Draft 0.2, with Q&A and clarifications
 
+### *This Plasma is not an UTXO one, but one with the balances, like the Ethereum itself!*
+
 ## Rationale
 
 I'll skip the huge explainer about zkSNARKs here and give mainly two reasons why zkSNARKs may be a useful for Plasma constructions:
