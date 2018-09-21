@@ -1,6 +1,6 @@
 # zkSNARKs governed Plasma by Matter Inc, informal spec
 
-### Draft 0.2, with Q&A and clarifications
+### Draft 0.3, with Q&A and clarifications
 
 ### *This Plasma is not an UTXO one, but one with the balances, like the Ethereum itself!*
 
@@ -35,7 +35,7 @@ In parallel I'll calculate some rough estimates for number of constraints per `t
 	-  MiMC `Longshift 2n/n`, ~ `800` constraints per hash
 	-  Pedderrsen hashes based on the embedded Edwards, ~ `3000` constraints per hashing `2n -> n`
 
-For detailed information check the following sources [1](https://github.com/zcash/zcash/issues/2233), [2](https://github.com/zcash/zcash/issues/2258).
+For detailed information check the following sources [1](https://github.com/zcash/zcash/issues/2233), [2](https://github.com/zcash/zcash/issues/2258), [3](https://z.cash/technology/jubjub.html).
 
 ### State format
 
@@ -45,9 +45,6 @@ For purposes of this construction all the balances, public keys and additional i
 - `balance`
 - `nonce` - for replay protection
 - `last sent at height` - the chain height when there was a last transfer from this account
-- `last updated at height` - chain height when there was a last transfer from this account or to this account [EDIT: This one is for information purposes, can me removed]
-
-*Separation of height counters for last send and last incoming transaction is necessary to prevent an attack from the operator that blocks user's exit by making a deposit to his account.*[EDIT: `last updated at height` counter is most likely to be removed]
 
 ### Transaction format
 
@@ -69,8 +66,6 @@ Combination of separate `nonce` and `good up to height` is required as the Plasm
 
 **Multiple transactions per block**
 
-*These restrictions may be excessive, WIP!*
-
 User can grant a permission to an operator a right to include more than one transaction in block. While the largest portion of state transition proving zkSNARK is described in the next section, here is a rationale why `last sent at height` is required as a part of the transaction and how multiple transaction per block work:
 
 - By providing an explicit `last sent at height` user gives a consent that he has observed the latest block in full. Of course there exist options about partial or full block withholding where only an operator knows it and can continue to sent new transactions, but it will implicitly prevent normal users from doing so!
@@ -87,18 +82,18 @@ User can grant a permission to an operator a right to include more than one tran
 
 `Transaction block` is based on a zkSNARK that proves proper update of the sparse Merkle tree. It has the following `public inputs`:
 
-- Previous state.
-- New state.
+- Old `state`.
+- New `state`.
 - Merkle tree root of the transactions tree of the applied block.
 - Total collected fee
 
 Internally the following is proved per application of one `transaction`:
 
 - Block ordering is checked (`old state height + 1 = new state height`)
-- Using the Merkle proof internal states of the two leafs updated by the transaction are proved for the previous state
+- Using the Merkle proof internal states of the two leafs updated by the transaction are proved for the old `state`
 - Content of the `transaction` in block is a private input
-- Ownership is properly checked, `balances` are properly updated, `nonce` is increased, `last updated at height` is updated for recipient and sender, `last sent at height` is updated for sender
-- Rules about `last sent at height` for transaction with permission for multiple inclusion per block is honored
+- Ownership is properly checked, `balances` are properly updated, `nonce` is increased, `last sent at height` is updated for sender
+- Rules about `last sent at height` for transaction with permission for multiple inclusion per block are honored
 - `good up to height` field of the transaction should be greater than or equal to the `new state height`
 - new Merkle tree root is recalculated
 - `total fee` is updated
@@ -113,8 +108,8 @@ The block is considered applied after an operator publishes a full content of `t
 
 `Deposit block` updates the balances tree by inclusion of the new leaf instead of empty one with the proper associated public key, balance, `nonce = 0` and properly set `last sent at height` and `last updated at height`. Size of such block is expected to be small, for example it should only serve up to 128 deposits. In such zkSNARK public inputs are the following:
 
-- Old state
-- New state
+- Old `state`
+- New `state`
 - All deposit balances and associated public keys
 
 Although the word "all" here can be scary, all this information is already listed in the smart-contract upon deposit requests from users. One should also make a similar kind of `topup block` to topup existing accounts, although those are skipped entirely in this document.
@@ -123,24 +118,26 @@ One important aspect for limitation of number of deposits to the Plasma: an oper
 
 ### Exits block
 
-`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner. *For later block withholding attack purposes one can not yet allow an instant exit and an exiting account is required to have not sent any transactions over the last `3 days`. As proofs are committed to the main chain the timestamping is allowed in a form of lookup `time <=> chain height`* [EDIT May be unnecessary and removed later].
+`Exit block` is quite simillar and it updates the balances tree by zeroing the balances of the leafs with the proper request owner.
 
-Upon the `exit request` the user provider a zkSNARK proof of the full data availability for the last **state** his transaction was included in the chain along with some bond. This is effectively a Merkle proof for some `chain height`. As `public inputs` such zkSNARK discloses the `nonce`, `last sent at height` and `last updated at height` for the exiting `account`. The `last sent at height` field is checked agains timestamping and if more than `3 days` has passes the request is accepted. Those requests form a queue based on the `last sent at height` - the smaller is better.
+Upon the `exit request` the user provider a zkSNARK proof of the full data availability for the last **state** his transaction was included in the chain along with some bond. This is effectively a Merkle proof for some `chain height`. As `public inputs` such zkSNARK discloses the `nonce`, `last sent at height` and `last updated at height` for the exiting `account`. The `last sent at height` field is checked agains timestamping and if more than `3 days` has passes the request is accepted. Those requests form a queue based on the `last sent at height` - the smaller is better. 
 
-This exit request can be challenged over the `3 days` period by providing a proof of full data availability that discloses a **state** for the same `account` with higher `nonce` and `last sent at height`. Notice that higher `last updated at height` is not enough. This is a griefing vector, although the user should only be griefed at maximum once if he properly checks the data availability and does not sent transactions if the latest committed block is not published in full.
+**Priority capping** is allowed here, where an exit from the very old `state` with very small `last sent at height` will have it's priority capped to the `chain height` of `- 1 day` from now, and this "capped priority" will be used as a counter for the data availability rollback described in the corresponding section. If priority capping is not introduced than there is a potential for infinite state rollback if a malicious party starts **valid** exits with smaller and smaller `last sent at height` that will always get into the exit queue before every other exit request.
+
+This exit request can be challenged over the `3 days` period by providing a proof of full data availability that discloses a **state** for the same `account` with higher `nonce` and `last sent at height`. This is a griefing vector, although the user should only be griefed at maximum once if he properly checks the data availability and does not sent transactions if the latest committed block is not published in full.
 
 If the `exit request` is not challenged it has to be included into some `exit block` no later than `1 day` after the end of the challenge period. This requirement is enforced by the smart-contract that manages the exit queue.
 
 `Public inputs` for the `exit block` zkSNARK are the following:
 
-- Old state
-- New state
+- Old `state`
+- New `state`
 - All `accounts` and `last sent at height` and from requests for exits from the users
 - All `balances` for the corresponding exit requests. These `balances` are provided by an operator based on the old state.
 
 Internally the following is checked:
 
-- With a Merkle proof the latest internal state of the `account` is revealed
+- With a Merkle proof the latest internal state of the `account` is revealed baseon on old `state`
 - `last sent at height` is checked againts the request data
 
 Such requirements provide the following guarantee:
@@ -162,11 +159,11 @@ One can further improve the user experience by adding more limitations:
 - Any kind block should be published at least once every `X` hours and in case of the huge pending exits queue the queue above has to be popped over the perios of `Y` hours, otherwise a block submission is prohibited
 - Any violations (enforced stops, effectively) are punishable by operator's deposit slashing in half
 
-A stopped block submission if either an operator going offline or a block withholding attack where the smart-contract tries to protect user rights limiting the operator in what kind of blocks he can send, and an operator failing to do so.
+A stopped block submission is equal to either an operator going offline or a block withholding attack where the smart-contract tries to protect user rights limiting the operator in what kind of blocks he can send, and an operator failing to do so.
 
 ### Actions in case of block withholding
 
-If user sees a block data being unavailable he waits for a required amount of time and submits a request for an exit. At some point the block submission will be prohibited and it implies, that the first (unchallenged) item in the exit queue has the `last sent at height` that corresponds to roughly `- 7 days` from now. Such height is the deemed the latest available.
+If user sees a block data being unavailable he submits a request for an exit. At some point the block submission will be prohibited and it implies, that the first (unchallenged) item in the exit queue has the `last sent at height` that corresponds to roughly `- 4 days` from now. Such height is the deemed the latest available.
 
 ## Prohibited block submission
 
@@ -175,9 +172,10 @@ There should exit a mechanism to still allow users to exit block submission is s
 - Any party can send a proof for a new exit blocks that start to pop requests from the exit queue over some time slot of `1 hour`
 - Those items are ranked by size - on the setup phase an operator MUST make zkSNARKs for `exit blocks` of various sizes
 - At the end of the time slot of if the `exit block` of the largest size is published - such block is accepted and becomes a new tip
-- This block does NOT need to publish any data - everything important is already in the `public inputs`
+- The party who's proof is used to update the chain tip does NOT need to publish any extra data - everything important is already in the `public inputs` of the proof and other participats can update their state accordingly and continue in the next round
 - Procedure repeats until the queue is empty
 - A block publisher gets some funds from the remaining operator's security deposit
+- One can make a procedure more interactive with commit-reveal scheme to reduce number of proofs checked on-chain, but this will require a deposit from the party that commits to provide some proof for an `exit block`
 
 # Q&A
 - What is the block is not available in full?
@@ -197,6 +195,9 @@ There should exit a mechanism to still allow users to exit block submission is s
 	- Block headers (which are Merkle tree roots of the transactions tree) are published as one of the public inputs to the `transaction block` zkSNARK proof.
 	- Those headers are NOT stored on-chain
 	- Users should download a block in full from the operator and check off-chain that the header from downloaded block matches the published one.
+- Is this the only way to revert the chain tip?
+	- No, there are others. For example, one can remove blocks one by one, but in this case an operator can make a lot of unavailable blocks before the reversion process starts and revert will be long and gas expensive.
+	- In principle one can make some protocol for users to vote (using proofs for availability for some random `account` in a state) what is the latest `state` known for evertone. 
 
 ### Authors
 
