@@ -66,9 +66,10 @@ Combination of separate `nonce` and `good up to height` is required as the Plasm
 
 **Multiple transactions per block**
 
-User can grant a permission to an operator a right to include more than one transaction in block. While the largest portion of state transition proving zkSNARK is described in the next section, here is a rationale why `last sent at height` is required as a part of the transaction and how multiple transaction per block work:
+User can grant a permission to an operator to include more than one transaction in block. While the largest portion of state transition proving zkSNARK is described in the next section, here is a rationale why `last sent at height` is required as a part of the transaction and how multiple transaction per block work:
 
-- By providing an explicit `last sent at height` user gives a consent that he has observed the latest block in full. Of course there exist options about partial or full block withholding where only an operator knows it and can continue to sent new transactions, but it will implicitly prevent normal users from doing so!
+- By providing an explicit `last sent at height` user gives a consent that he has observed a full `block` where his last transaction was included. 
+- Of course there exist an options about partial or full block withholding where only an operator knows it and can continue to sent new transactions, but it will implicitly prevent normal users from doing so!
 - If `allow multiple in block` is NOT set an operator should check the following:
 	- `nonce` matches the data in SMT
 	- `last sent at height` matches the data in SMT
@@ -198,6 +199,13 @@ There should exit a mechanism to still allow users to exit block submission is s
 - Is this the only way to revert the chain tip?
 	- No, there are others. For example, one can remove blocks one by one, but in this case an operator can make a lot of unavailable blocks before the reversion process starts and revert will be long and gas expensive.
 	- In principle one can make some protocol for users to vote (using proofs for availability for some random `account` in a state) what is the latest `state` known for evertone. 
+
+### Notices
+
+This construction may not be final and I'll continue to work on it for better UX and guarantees. Everyone is welcome to find the weak spots and errors in this construction so at the end of the day it can become correct and final!
+
+Special thanks to [josojo](https://ethresear.ch/u/josojo) for an inspiration!
+
 
 ### Authors
 
