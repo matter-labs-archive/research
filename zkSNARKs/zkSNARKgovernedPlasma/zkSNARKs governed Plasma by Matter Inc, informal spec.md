@@ -4,6 +4,10 @@
 
 ### *This Plasma is not an UTXO one, but one with the balances, like the Ethereum itself!*
 
+## Known problems:
+
+- No "instant finality" - there is 1 day window of **valid** headers rollback in case of block withholding
+
 ## Rationale
 
 I'll skip the huge explainer about zkSNARKs here and give mainly two reasons why zkSNARKs may be a useful for Plasma constructions:
@@ -204,9 +208,11 @@ There should exit a mechanism to still allow users to exit block submission is s
 
 This construction may not be final and I'll continue to work on it for better UX and guarantees. Everyone is welcome to find the weak spots and errors in this construction so at the end of the day it can become correct and final!
 
-Special thanks to [josojo](https://ethresear.ch/u/josojo) for an inspiration!
+Orignal Plasma philosophy by Vitalik Buterin and Joseph Poon, [here](https://plasma.io)
 
+Special thanks to [josojo](https://ethresear.ch/u/josojo) for an inspiration!
 
 ### Authors
 
 - Alex Vlasov, alex.m.vlasov@gmail.com
+- Konstantin Panarin
