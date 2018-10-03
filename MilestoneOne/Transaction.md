@@ -62,6 +62,10 @@ transactionData = RLPEncode([Version, Type, GoodUntil, Inputs, Outputs, MessageD
 
 Then signatures are required from every participant whose input was a part of the transaction.
 
-- Signatures, a list of lists `[signatureV, signatureR, signatureS]` - inducated a will of input owners to do a transaction. A `transactionData` is signed separately by each owner and than signatures are concatenated. If one owner brought more than one input an extra signature is not required.
+- Signatures, a list of lists `[signatureV, signatureR, signatureS, [inputIndex0, inputIndex1, ...]]` - inducated a will of input owners to do a transaction. A `transactionData` is signed separately by each owner, and then signatures are concatenated with an indication by a set of 1 byte indexes `[inputIndex0, inputIndex1, ...]` for what input user signs.
 
 Fee payments for transaction depend on a "branching factor" - a difference between consumed inputs and produced outputs. For transactions with a branching factor of less than zero fee is not taken.
+
+## Field ordering and malleability
+
+It's important to have a transaction hash uniquely identifing a valid transaciton, so while the internal transaction body (without signatures) is already covered by signatures for uniqueness, a set of signatures should be ordered by the smallest `inputIndex` in a list of inputs being signed, and indexed themselves should be ordered in ascending order.
